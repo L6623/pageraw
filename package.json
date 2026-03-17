@@ -1,14 +1,14 @@
 {
   "name": "mi-paste-raw",
   "version": "1.0.0",
-  "description": "Pastebin raw simple",
+  "description": "Pastebin raw simple en Render",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
-    "short-uuid": "^4.4.0"
+    "short-uuid": "^6.0.3"
   },
   "engines": {
     "node": ">=18"
