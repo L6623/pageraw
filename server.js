@@ -117,10 +117,54 @@ app.get('/raw/:id', async (req, res) => {
     if (isBrowser) {
       return res.send(`
         <html>
-        <body style="background:#000; color:#00e676; font-size:2rem; display:flex; justify-content:center; align-items:center; height:100vh; font-family:Arial;">
-          <div style="text-align:center;">
-            <div style="font-size:3rem; margin-bottom:1rem;">bxl VM</div>
-            <div>Este script está protegido</div>
+        <head>
+          <title>Loadstring — bxl VM</title>
+          <style>
+            body {
+              background:#000;
+              color:white;
+              font-family:Arial;
+              display:flex;
+              justify-content:center;
+              align-items:center;
+              height:100vh;
+              margin:0;
+            }
+            .box {
+              background:#0d0d0d;
+              padding:20px;
+              border-radius:10px;
+              width:90%;
+              max-width:500px;
+              border:1px solid #222;
+            }
+            .title {
+              font-size:1.5rem;
+              margin-bottom:10px;
+            }
+            pre {
+              background:#111;
+              padding:10px;
+              border-radius:6px;
+              color:#00e676;
+              overflow-x:auto;
+            }
+            .note {
+              margin-top:10px;
+              color:#888;
+              font-size:0.9rem;
+              text-align:center;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="box">
+            <div class="title">📜 Loadstring</div>
+            <pre>
+script_key = "KEY"; -- A key might be required
+loadstring(game:HttpGet("${req.protocol}://${req.get('host')}/raw/${req.params.id}"))()
+            </pre>
+            <div class="note">Contents can not be displayed on browser • bxl VM</div>
           </div>
         </body>
         </html>
