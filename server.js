@@ -1,44 +1,47 @@
-const express = require('express');
-const fs = require('fs').promises;
-const path = require('path');
-const crypto = require('crypto');
-const cookieParser = require('cookie-parser');
+const express = require("express");
+const fs = require("fs").promises;
+const path = require("path");
+const crypto = require("crypto");
+const cookieParser = require("cookie-parser");
 
 const app = express();
-
 const PORT = process.env.PORT || 3000;
-const PASTES_DIR = path.join(__dirname, 'pastes');
+
+// Railway solo permite escribir en /tmp
+const BASE_DIR = "/tmp/pastes";
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
 // Crear token único por usuario
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   if (!req.cookies.user_token) {
-    const token = crypto.randomUUID().replace(/-/g, '');
+    const token = crypto.randomUUID().replace(/-/g, "");
     res.cookie("user_token", token, { maxAge: 1000 * 60 * 60 * 24 * 365 });
     req.user_token = token;
   } else {
     req.user_token = req.cookies.user_token;
   }
+
+  await fs.mkdir(BASE_DIR, { recursive: true });
   next();
 });
 
 // Obtener pastes del usuario
 async function getUserPastes(token) {
   try {
-    const files = await fs.readdir(PASTES_DIR);
+    const files = await fs.readdir(BASE_DIR);
     return files
-      .filter(f => f.endsWith(".txt") && f.startsWith(token + "_"))
-      .map(f => f.replace(".txt", "").replace(token + "_", ""));
+      .filter(f => f.startsWith(token + "_") && f.endsWith(".txt"))
+      .map(f => f.replace(token + "_", "").replace(".txt", ""));
   } catch {
     return [];
   }
 }
 
 // Página principal
-app.get('/', async (req, res) => {
+app.get("/", async (req, res) => {
   const pastes = await getUserPastes(req.user_token);
 
   res.send(`
@@ -70,7 +73,7 @@ app.get('/', async (req, res) => {
         <h3>Tus pastes</h3>
         ${pastes.length === 0 ? "<p>No hay pastes aún.</p>" : pastes.map(id => `
           <a href="/edit/${id}">${id}</a>
-        `).join('')}
+        `).join("")}
       </div>
     </div>
   </body>
@@ -79,19 +82,18 @@ app.get('/', async (req, res) => {
 });
 
 // Crear paste
-app.post('/paste', async (req, res) => {
-  const text = req.body.text || '';
-  const name = req.body.name?.trim() || 'sin_nombre';
+app.post("/paste", async (req, res) => {
+  const text = req.body.text || "";
+  const name = req.body.name?.trim() || "sin_nombre";
 
   if (!text.trim()) return res.send("Nada que pegar.");
 
-  const id = name.replace(/[^a-zA-Z0-9_-]/g, '') || "paste";
-  const filePath = path.join(PASTES_DIR, `${req.user_token}_${id}.txt`);
+  const id = name.replace(/[^a-zA-Z0-9_-]/g, "") || "paste";
+  const filePath = path.join(BASE_DIR, `${req.user_token}_${id}.txt`);
 
-  await fs.mkdir(PASTES_DIR, { recursive: true });
-  await fs.writeFile(filePath, text, 'utf8');
+  await fs.writeFile(filePath, text, "utf8");
 
-  const rawUrl = `${req.protocol}://${req.get('host')}/raw/${id}`;
+  const rawUrl = `${req.protocol}://${req.get("host")}/raw/${id}`;
 
   res.send(`
     <h1>Paste creado</h1>
@@ -101,12 +103,48 @@ app.post('/paste', async (req, res) => {
 });
 
 // Editar paste
-app.get('/edit/:id', async (req, res) => {
-  const filePath = path.join(PASTES_DIR, `${req.user_token}_${req.params.id}.txt`);
+app.get("/edit/:id", async (req, res) => {
+  const filePath = path.join(BASE_DIR, `${req.user_token}_${req.params.id}.txt`);
 
   try {
-    const content = await fs.readFile(filePath, 'utf8');
+    const content = await fs.readFile(filePath, "utf8");
 
+    res.send(`
+      <h1>Editando: ${req.params.id}</h1>
+      <form method="POST" action="/edit/${req.params.id}">
+        <textarea name="text" style="width:100%;height:300px;">${content}</textarea>
+        <button type="submit">Guardar</button>
+      </form>
+    `);
+
+  } catch {
+    res.send("No tienes permiso para ver este paste.");
+  }
+});
+
+// Guardar edición
+app.post("/edit/:id", async (req, res) => {
+  const filePath = path.join(BASE_DIR, `${req.user_token}_${req.params.id}.txt`);
+  await fs.writeFile(filePath, req.body.text, "utf8");
+  res.send("Guardado.");
+});
+
+// RAW estilo Luarmor
+app.get("/raw/:id", async (req, res) => {
+  const filePath = path.join(BASE_DIR, `${req.user_token}_${req.params.id}.txt`);
+
+  try {
+    const content = await fs.readFile(filePath, "utf8");
+    res.set("Content-Type", "text/plain");
+    return res.send(content);
+  } catch {
+    return res.status(404).send("No encontrado.");
+  }
+});
+
+app.listen(PORT, () => {
+  console.log("Servidor corriendo en Railway en puerto " + PORT);
+});
     res.send(`
       <h1>Editando: ${req.params.id}</h1>
       <form method="POST" action="/edit/${req.params.id}">
