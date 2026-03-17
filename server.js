@@ -4,19 +4,32 @@ const path = require('path');
 const short = require('short-uuid');
 const app = express();
 
+const PORT = process.env.PORT || 3000;
+const PASTES_DIR = path.join(__dirname, 'pastes');
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Página principal (formulario para pegar texto)
+// Página principal con formulario
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="es">
-    <head><meta charset="utf-8"><title>Mi Paste Raw</title></head>
-    <body style="font-family:monospace; background:#111; color:#eee; padding:2rem;">
-      <h1>Pega tu texto crudo</h1>
+    <head>
+      <meta charset="utf-8">
+      <title>Mi Paste Raw - Angel</title>
+      <style>
+        body { font-family: monospace; background: #111; color: #eee; padding: 2rem; margin: 0; }
+        textarea { width: 100%; height: 300px; background: #222; color: #0f0; border: 1px solid #444; padding: 1rem; font-size: 1rem; }
+        button { padding: 1rem 2rem; background: #0f0; color: #000; border: none; cursor: pointer; font-size: 1.2rem; }
+        button:hover { background: #0c0; }
+        pre { background: #000; padding: 1rem; overflow: auto; max-height: 400px; }
+      </style>
+    </head>
+    <body>
+      <h1>Pega tu texto crudo bro</h1>
       <form method="POST" action="/paste">
-        <textarea name="text" rows="15" cols="80" style="width:100%; background:#222; color:#0f0; font-family:monospace;"></textarea><br><br>
+        <textarea name="text" placeholder="Aquí tu código, log, config, lo que sea..."></textarea><br><br>
         <button type="submit">Crear Paste Raw</button>
       </form>
     </body>
@@ -24,36 +37,47 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Crear paste
+// Crear nuevo paste
 app.post('/paste', async (req, res) => {
   const text = req.body.text || '';
-  if (!text.trim()) return res.status(400).send('Nada que pegar bro');
+  if (!text.trim()) {
+    return res.status(400).send('<h1>Nada que pegar, bro :(</h1><a href="/">Volver</a>');
+  }
 
-  const id = short.generate().slice(0, 8); // ID corto tipo pastebin
-  const filePath = path.join(__dirname, 'pastes', `${id}.txt`);
+  const id = short.generate().slice(0, 10); // 10 chars para que sea más corto y legible
+  const filePath = path.join(PASTES_DIR, `${id}.txt`);
 
-  await fs.mkdir(path.join(__dirname, 'pastes'), { recursive: true });
-  await fs.writeFile(filePath, text);
+  try {
+    await fs.mkdir(PASTES_DIR, { recursive: true });
+    await fs.writeFile(filePath, text, 'utf8');
 
-  const rawUrl = `${req.protocol}://${req.get('host')}/raw/${id}`;
-  res.send(`
-    <h1>¡Listo!</h1>
-    <p>Tu paste raw: <a href="${rawUrl}">${rawUrl}</a></p>
-    <p>curl ${rawUrl} para verlo en terminal</p>
-    <pre>${text.slice(0, 300)}${text.length > 300 ? '...' : ''}</pre>
-  `);
+    const rawUrl = `${req.protocol}://${req.get('host')}/raw/${id}`;
+    res.send(`
+      <h1>¡Listo, Angel!</h1>
+      <p>Tu paste raw: <strong><a href="${rawUrl}">${rawUrl}</a></strong></p>
+      <p>En terminal: <code>curl ${rawUrl}</code></p>
+      <h3>Preview (primeras líneas):</h3>
+      <pre>${text.slice(0, 500)}${text.length > 500 ? '...\n(más líneas ocultas)' : ''}</pre>
+      <a href="/">Crear otro</a>
+    `);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('<h1>Error al guardar :(</h1><a href="/">Volver</a>');
+  }
 });
 
-// Servir raw puro (¡esto es lo clave!)
+// Servir el raw puro (text/plain)
 app.get('/raw/:id', async (req, res) => {
-  const filePath = path.join(__dirname, 'pastes', `${req.params.id}.txt`);
+  const filePath = path.join(PASTES_DIR, `${req.params.id}.txt`);
   try {
     const content = await fs.readFile(filePath, 'utf8');
     res.set('Content-Type', 'text/plain; charset=utf-8');
     res.send(content);
-  } catch (e) {
-    res.status(404).send('Paste no encontrado :(');
+  } catch (err) {
+    res.status(404).set('Content-Type', 'text/plain').send('Paste no encontrado :(\n');
   }
 });
 
-app.listen(3000, () => console.log('Server corriendo en http://localhost:3000'));
+app.listen(PORT, () => {
+  console.log(`Server corriendo en puerto ${PORT} - http://localhost:${PORT}`);
+});
