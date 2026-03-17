@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 
@@ -10,52 +11,65 @@ const PASTES_DIR = path.join(__dirname, 'pastes');
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(cookieParser());
 
-// Obtener lista de pastes
-async function getAllPastes() {
+// Crear token único por usuario
+app.use((req, res, next) => {
+  if (!req.cookies.user_token) {
+    const token = crypto.randomUUID().replace(/-/g, '');
+    res.cookie("user_token", token, { maxAge: 1000 * 60 * 60 * 24 * 365 });
+    req.user_token = token;
+  } else {
+    req.user_token = req.cookies.user_token;
+  }
+  next();
+});
+
+// Obtener pastes del usuario
+async function getUserPastes(token) {
   try {
     const files = await fs.readdir(PASTES_DIR);
-    return files.filter(f => f.endsWith('.txt')).map(f => f.replace('.txt', ''));
+    return files
+      .filter(f => f.endsWith(".txt") && f.startsWith(token + "_"))
+      .map(f => f.replace(".txt", "").replace(token + "_", ""));
   } catch {
     return [];
   }
 }
 
-// Página principal estilo Pastefy
+// Página principal
 app.get('/', async (req, res) => {
-  const pastes = await getAllPastes();
+  const pastes = await getUserPastes(req.user_token);
 
   res.send(`
-  <!DOCTYPE html>
-  <html lang="es">
+  <html>
   <head>
-    <meta charset="utf-8">
     <title>Pastefy — bxl VM</title>
     <style>
-      body { margin:0; background:#0d0d0d; color:#eaeaea; font-family:Arial; }
-      header { background:#111; padding:1rem 2rem; font-size:1.5rem; font-weight:bold; color:#00e676; border-bottom:2px solid #00e676; }
-      .container { max-width:900px; margin:2rem auto; padding:1rem; }
+      body { background:#0d0d0d; color:#eaeaea; font-family:Arial; }
+      header { background:#111; padding:1rem; font-size:1.5rem; color:#00e676; border-bottom:2px solid #00e676; }
+      .container { max-width:900px; margin:2rem auto; }
       textarea { width:100%; height:300px; background:#1a1a1a; color:#00e676; border:1px solid #333; padding:1rem; font-family:monospace; border-radius:6px; }
-      button { margin-top:1rem; padding:0.8rem 1.5rem; background:#00e676; color:#000; border:none; border-radius:6px; font-size:1rem; cursor:pointer; font-weight:bold; }
-      button:hover { background:#00c853; }
+      input { width:100%; padding:0.5rem; margin-bottom:1rem; border-radius:6px; border:none; background:#1a1a1a; color:#00e676; }
+      button { padding:0.8rem 1.5rem; background:#00e676; color:#000; border:none; border-radius:6px; font-size:1rem; cursor:pointer; font-weight:bold; }
       .list { margin-top:2rem; background:#111; padding:1rem; border-radius:6px; }
       .list a { color:#00e676; text-decoration:none; display:block; padding:0.3rem 0; }
-      .list a:hover { color:#00c853; }
     </style>
   </head>
   <body>
-    <header>Pastefy — Protected by bxl VM</header>
+    <header>Pastefy — bxl VM</header>
     <div class="container">
       <h2>Crear nuevo paste</h2>
       <form method="POST" action="/paste">
+        <input name="name" placeholder="Nombre del paste...">
         <textarea name="text" placeholder="Pega tu script aquí..."></textarea>
         <button type="submit">Crear Paste</button>
       </form>
 
       <div class="list">
-        <h3>Tus pastes guardados</h3>
+        <h3>Tus pastes</h3>
         ${pastes.length === 0 ? "<p>No hay pastes aún.</p>" : pastes.map(id => `
-          <a href="/raw/${id}">${id}</a>
+          <a href="/edit/${id}">${id}</a>
         `).join('')}
       </div>
     </div>
@@ -67,10 +81,12 @@ app.get('/', async (req, res) => {
 // Crear paste
 app.post('/paste', async (req, res) => {
   const text = req.body.text || '';
+  const name = req.body.name?.trim() || 'sin_nombre';
+
   if (!text.trim()) return res.send("Nada que pegar.");
 
-  const id = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
-  const filePath = path.join(PASTES_DIR, `${id}.txt`);
+  const id = name.replace(/[^a-zA-Z0-9_-]/g, '') || "paste";
+  const filePath = path.join(PASTES_DIR, `${req.user_token}_${id}.txt`);
 
   await fs.mkdir(PASTES_DIR, { recursive: true });
   await fs.writeFile(filePath, text, 'utf8');
@@ -80,53 +96,49 @@ app.post('/paste', async (req, res) => {
   res.send(`
     <h1>Paste creado</h1>
     <p><a href="${rawUrl}">${rawUrl}</a></p>
-    <p>Para Delta:</p>
     <pre>loadstring(game:HttpGet("${rawUrl}"))()</pre>
   `);
 });
 
-// RAW con anti-copy
-app.get('/raw/:id', async (req, res) => {
-  const filePath = path.join(PASTES_DIR, `${req.params.id}.txt`);
+// Editar paste
+app.get('/edit/:id', async (req, res) => {
+  const filePath = path.join(PASTES_DIR, `${req.user_token}_${req.params.id}.txt`);
 
   try {
     const content = await fs.readFile(filePath, 'utf8');
 
-    const accept = (req.get("Accept") || "").toLowerCase();
-    const ua = (req.get("User-Agent") || "").toLowerCase();
-
-    const isBrowser = accept.includes("text/html");
-
-    const isDelta =
-      ua.includes("roblox") ||
-      ua.includes("wininet");
-
-    const isCopyAttempt =
-      accept === "*/*" && !isDelta;
-
-    if (isCopyAttempt) {
-      res.set("Content-Type", "text/plain");
-      return res.send("This script was obfuscated by bxl VM");
-    }
-
-    if (isDelta) {
-      res.set("Content-Type", "text/plain");
-      return res.send(content);
-    }
-
-    if (isBrowser) {
-      return res.send(`
-        <html><body style="background:black;color:red;font-size:3rem;display:flex;justify-content:center;align-items:center;height:100vh;">
-        This script is protected by bxl VM
-        </body></html>
-      `);
-    }
-
-    res.set("Content-Type", "text/plain");
-    res.send(content);
+    res.send(`
+      <h1>Editando: ${req.params.id}</h1>
+      <form method="POST" action="/edit/${req.params.id}">
+        <textarea name="text" style="width:100%;height:300px;">${content}</textarea>
+        <button type="submit">Guardar</button>
+      </form>
+    `);
 
   } catch {
-    res.status(404).send("Paste no encontrado");
+    res.send("No tienes permiso para ver este paste.");
+  }
+});
+
+// Guardar edición
+app.post('/edit/:id', async (req, res) => {
+  const filePath = path.join(PASTES_DIR, `${req.user_token}_${req.params.id}.txt`);
+  await fs.writeFile(filePath, req.body.text, 'utf8');
+  res.send("Guardado.");
+});
+
+// RAW estilo Luarmor
+app.get('/raw/:id', async (req, res) => {
+  const filePath = path.join(PASTES_DIR, `${req.user_token}_${req.params.id}.txt`);
+
+  try {
+    const content = await fs.readFile(filePath, 'utf8');
+
+    res.set("Content-Type", "text/plain");
+    return res.send(content);
+
+  } catch {
+    return res.status(404).send("No encontrado.");
   }
 });
 
