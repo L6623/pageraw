@@ -85,49 +85,45 @@ app.post('/paste', async (req, res) => {
   `);
 });
 
-// RAW protegido visualmente pero ejecutable por Delta
+// RAW con anti-copy
 app.get('/raw/:id', async (req, res) => {
   const filePath = path.join(PASTES_DIR, `${req.params.id}.txt`);
 
   try {
     const content = await fs.readFile(filePath, 'utf8');
 
-    // Detectar si es navegador por el header Accept
     const accept = (req.get("Accept") || "").toLowerCase();
+    const ua = (req.get("User-Agent") || "").toLowerCase();
+
     const isBrowser = accept.includes("text/html");
 
-    if (!isBrowser) {
-      // Exploit recibe LUA puro
-      res.set('Content-Type', 'text/plain; charset=utf-8');
+    const isDelta =
+      ua.includes("roblox") ||
+      ua.includes("wininet");
+
+    const isCopyAttempt =
+      accept === "*/*" && !isDelta;
+
+    if (isCopyAttempt) {
+      res.set("Content-Type", "text/plain");
+      return res.send("This script was obfuscated by bxl VM");
+    }
+
+    if (isDelta) {
+      res.set("Content-Type", "text/plain");
       return res.send(content);
     }
 
-    // Navegador recibe capa negra
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Protected by bxl VM</title>
-        <style>
-          html, body { margin:0; padding:0; height:100%; background:#000; }
-          .blocker {
-            position:fixed; inset:0; background:#000;
-            display:flex; align-items:center; justify-content:center;
-          }
-          .msg {
-            color:#ff0044; font-size:3rem; font-weight:bold;
-            border:4px solid #ff0044; padding:2rem;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="blocker">
-          <div class="msg">This script is protected by bxl VM</div>
-        </div>
-      </body>
-      </html>
-    `);
+    if (isBrowser) {
+      return res.send(`
+        <html><body style="background:black;color:red;font-size:3rem;display:flex;justify-content:center;align-items:center;height:100vh;">
+        This script is protected by bxl VM
+        </body></html>
+      `);
+    }
+
+    res.set("Content-Type", "text/plain");
+    res.send(content);
 
   } catch {
     res.status(404).send("Paste no encontrado");
