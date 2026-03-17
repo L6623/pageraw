@@ -11,7 +11,7 @@ const PASTES_DIR = path.join(__dirname, 'pastes');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Página principal con formulario
+// Página principal: formulario para crear paste
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -20,17 +20,42 @@ app.get('/', (req, res) => {
       <meta charset="utf-8">
       <title>Mi Paste Raw - Protected by bxl VM</title>
       <style>
-        body { font-family: monospace; background: #111; color: #eee; padding: 2rem; margin: 0; }
-        textarea { width: 100%; height: 300px; background: #222; color: #0f0; border: 1px solid #444; padding: 1rem; font-size: 1rem; }
-        button { padding: 1rem 2rem; background: #0f0; color: #000; border: none; cursor: pointer; font-size: 1.2rem; }
+        body { 
+          font-family: monospace; 
+          background: #111; 
+          color: #eee; 
+          padding: 2rem; 
+          margin: 0; 
+        }
+        h1 { color: #0f0; }
+        textarea { 
+          width: 100%; 
+          height: 300px; 
+          background: #222; 
+          color: #0f0; 
+          border: 1px solid #444; 
+          padding: 1rem; 
+          font-size: 1rem; 
+          font-family: monospace;
+        }
+        button { 
+          padding: 1rem 2rem; 
+          background: #0f0; 
+          color: #000; 
+          border: none; 
+          cursor: pointer; 
+          font-size: 1.2rem; 
+          margin-top: 1rem;
+        }
         button:hover { background: #0c0; }
+        p { margin: 1rem 0; }
       </style>
     </head>
     <body>
       <h1>Pega tu texto crudo bro</h1>
-      <p>Después de crear, usa el link /view/ID para ver protegido</p>
+      <p>Después de crear, usa el link /view/ID para la versión protegida (capa negra)</p>
       <form method="POST" action="/paste">
-        <textarea name="text" placeholder="Aquí tu código, log, config, lo que sea..."></textarea><br><br>
+        <textarea name="text" placeholder="Aquí tu código, script, config..."></textarea><br>
         <button type="submit">Crear Paste Raw</button>
       </form>
     </body>
@@ -38,11 +63,11 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Crear nuevo paste
+// Crear paste nuevo
 app.post('/paste', async (req, res) => {
   const text = req.body.text || '';
   if (!text.trim()) {
-    return res.status(400).send('<h1>Nada que pegar, bro :(</h1><a href="/">Volver</a>');
+    return res.status(400).send('<h1>Nada que pegar :(</h1><a href="/">Volver</a>');
   }
 
   const id = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
@@ -56,13 +81,19 @@ app.post('/paste', async (req, res) => {
     const viewUrl = `${req.protocol}://${req.get('host')}/view/${id}`;
 
     res.send(`
-      <h1>¡Listo, Angel!</h1>
-      <p>Link raw (texto plano puro): <strong><a href="${rawUrl}">${rawUrl}</a></strong></p>
-      <p>Link protegido (con capa negra): <strong><a href="${viewUrl}">${viewUrl}</a></strong></p>
-      <p>En terminal: <code>curl ${rawUrl}</code></p>
-      <h3>Preview (primeras líneas):</h3>
-      <pre>${text.slice(0, 500)}${text.length > 500 ? '...\n(más líneas ocultas)' : ''}</pre>
-      <a href="/">Crear otro</a>
+      <!DOCTYPE html>
+      <html lang="es">
+      <head><meta charset="utf-8"><title>¡Listo!</title></head>
+      <body style="font-family:monospace;background:#111;color:#eee;padding:2rem;">
+        <h1>¡Creado con éxito!</h1>
+        <p>Link raw (texto plano): <a href="${rawUrl}" style="color:#0f0;">${rawUrl}</a></p>
+        <p>Link protegido (capa negra): <a href="${viewUrl}" style="color:#ff0044;">${viewUrl}</a></p>
+        <p>En terminal: curl ${rawUrl}</p>
+        <h3>Preview:</h3>
+        <pre style="background:#000;color:#0f0;padding:1rem;max-height:300px;overflow:auto;">${text.slice(0, 500)}${text.length > 500 ? '...' : ''}</pre>
+        <a href="/" style="color:#0f0;">Crear otro</a>
+      </body>
+      </html>
     `);
   } catch (err) {
     console.error(err);
@@ -70,7 +101,7 @@ app.post('/paste', async (req, res) => {
   }
 });
 
-// Servir el raw puro (sin protección visual)
+// Raw puro (sin protección visual)
 app.get('/raw/:id', async (req, res) => {
   const filePath = path.join(PASTES_DIR, `${req.params.id}.txt`);
   try {
@@ -82,59 +113,39 @@ app.get('/raw/:id', async (req, res) => {
   }
 });
 
-// Ruta protegida: capa 100% negra opaca
+// View protegido: capa negra 100% opaca que tapa todo visualmente
 app.get('/view/:id', async (req, res) => {
   const filePath = path.join(PASTES_DIR, `${req.params.id}.txt`);
   try {
     const content = await fs.readFile(filePath, 'utf8');
 
-    const escapedContent = content
+    // Escapar para HTML seguro
+    const escaped = content
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
 
-    res.send(`
-      <!DOCTYPE html>
-      <html lang="es">
-      <head>
-        <meta charset="utf-8">
-        <title>Protected by bxl VM</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          * { margin:0; padding:0; box-sizing:border-box; }
-          body, html { height:100%; overflow:hidden; background:#000; font-family:Consolas,monospace; color:#fff; }
-          .container { position:relative; height:100vh; width:100vw; }
-          pre { 
-            position:absolute; top:0; left:0; width:100%; height:100%; 
-            padding:2rem; white-space:pre-wrap; word-wrap:break-word; overflow:auto; 
-            background:#0d1117; color:#c9d1d9; font-size:1rem; line-height:1.5;
-          }
-          .overlay { 
-            position:absolute; top:0; left:0; width:100%; height:100%; 
-            background:#000; z-index:9999; display:flex; align-items:center; justify-content:center;
-            pointer-events:all;
-          }
-          .message { 
-            font-size:2.8rem; font-weight:bold; color:#ff0044; text-align:center;
-            text-shadow:0 0 15px #000, 0 0 30px #ff0044;
-            padding:1.5rem 3rem; background:rgba(0,0,0,0.7); border:4px solid #ff0044; border-radius:12px;
-            max-width:90%;
-          }
-          body, .overlay { user-select:none; -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <pre>${escapedContent}</pre>
-          <div class="overlay">
-            <div class="message">This script is protected by bxl VM</div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `);
+    res.send(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Protected by bxl VM</title>
+  <style>
+    html, body { margin:0; padding:0; height:100vh; width:100vw; overflow:hidden; background:#000; font-family:monospace; }
+    .content { position:absolute; inset:0; padding:2rem; color:#eee; white-space:pre-wrap; overflow:auto; background:#111; font-size:1rem; line-height:1.5; }
+    .blocker { position:fixed; inset:0; background:#000; z-index:10000; display:flex; align-items:center; justify-content:center; pointer-events:all; user-select:none; -webkit-user-select:none; }
+    .msg { color:#ff0044; font-size:3.5rem; font-weight:bold; text-align:center; padding:2rem; border:6px solid #ff0044; border-radius:20px; background:rgba(0,0,0,0.9); max-width:90%; text-shadow:0 0 20px #000; }
+  </style>
+</head>
+<body>
+  <div class="content">${escaped}</div>
+  <div class="blocker">
+    <div class="msg">This script is protected by bxl VM</div>
+  </div>
+</body>
+</html>`);
   } catch (err) {
     res.status(404).send('Paste no encontrado');
   }
