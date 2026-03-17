@@ -11,13 +11,11 @@ const PASTES_DIR = path.join(__dirname, 'pastes');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Utilidad para leer todos los pastes
+// Obtener lista de pastes
 async function getAllPastes() {
   try {
     const files = await fs.readdir(PASTES_DIR);
-    return files
-      .filter(f => f.endsWith('.txt'))
-      .map(f => f.replace('.txt', ''));
+    return files.filter(f => f.endsWith('.txt')).map(f => f.replace('.txt', ''));
   } catch {
     return [];
   }
@@ -34,64 +32,15 @@ app.get('/', async (req, res) => {
     <meta charset="utf-8">
     <title>Pastefy — bxl VM</title>
     <style>
-      body {
-        margin: 0;
-        background: #0d0d0d;
-        color: #eaeaea;
-        font-family: Arial, sans-serif;
-      }
-      header {
-        background: #111;
-        padding: 1rem 2rem;
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #00e676;
-        border-bottom: 2px solid #00e676;
-      }
-      .container {
-        max-width: 900px;
-        margin: 2rem auto;
-        padding: 1rem;
-      }
-      textarea {
-        width: 100%;
-        height: 300px;
-        background: #1a1a1a;
-        color: #00e676;
-        border: 1px solid #333;
-        padding: 1rem;
-        font-family: monospace;
-        border-radius: 6px;
-      }
-      button {
-        margin-top: 1rem;
-        padding: 0.8rem 1.5rem;
-        background: #00e676;
-        color: #000;
-        border: none;
-        border-radius: 6px;
-        font-size: 1rem;
-        cursor: pointer;
-        font-weight: bold;
-      }
-      button:hover {
-        background: #00c853;
-      }
-      .list {
-        margin-top: 2rem;
-        background: #111;
-        padding: 1rem;
-        border-radius: 6px;
-      }
-      .list a {
-        color: #00e676;
-        text-decoration: none;
-        display: block;
-        padding: 0.3rem 0;
-      }
-      .list a:hover {
-        color: #00c853;
-      }
+      body { margin:0; background:#0d0d0d; color:#eaeaea; font-family:Arial; }
+      header { background:#111; padding:1rem 2rem; font-size:1.5rem; font-weight:bold; color:#00e676; border-bottom:2px solid #00e676; }
+      .container { max-width:900px; margin:2rem auto; padding:1rem; }
+      textarea { width:100%; height:300px; background:#1a1a1a; color:#00e676; border:1px solid #333; padding:1rem; font-family:monospace; border-radius:6px; }
+      button { margin-top:1rem; padding:0.8rem 1.5rem; background:#00e676; color:#000; border:none; border-radius:6px; font-size:1rem; cursor:pointer; font-weight:bold; }
+      button:hover { background:#00c853; }
+      .list { margin-top:2rem; background:#111; padding:1rem; border-radius:6px; }
+      .list a { color:#00e676; text-decoration:none; display:block; padding:0.3rem 0; }
+      .list a:hover { color:#00c853; }
     </style>
   </head>
   <body>
@@ -143,24 +92,33 @@ app.get('/raw/:id', async (req, res) => {
   try {
     const content = await fs.readFile(filePath, 'utf8');
 
-    const ua = req.get('User-Agent') || '';
-    const isBrowser =
-      ua.includes('Mozilla') ||
-      ua.includes('Chrome') ||
-      ua.includes('Safari') ||
-      ua.includes('Firefox') ||
-      ua.includes('Edge');
+    const ua = (req.get('User-Agent') || "").toLowerCase();
 
-    if (!isBrowser) {
+    // Detectar exploits reales
+    const isExploit =
+      ua.includes("roblox") ||
+      ua.includes("delta") ||
+      ua.includes("scriptware") ||
+      ua.includes("krnl") ||
+      ua.includes("fluxus") ||
+      ua.includes("synapse") ||
+      ua.includes("wininet");
+
+    // Detectar navegadores
+    const isBrowser =
+      ua.includes("mozilla") ||
+      ua.includes("chrome") ||
+      ua.includes("safari") ||
+      ua.includes("firefox") ||
+      ua.includes("edge");
+
+    // Si es exploit → devolver LUA puro
+    if (isExploit && !isBrowser) {
       res.set('Content-Type', 'text/plain; charset=utf-8');
       return res.send(content);
     }
 
-    const escaped = content
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
+    // Si es navegador → capa negra
     res.send(`
       <!DOCTYPE html>
       <html>
