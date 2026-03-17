@@ -10,6 +10,16 @@ const PORT = process.env.PORT || 3000;
 // Railway solo permite escribir en /tmp
 const BASE_DIR = "/tmp/pastes";
 
+// FIX: Crear carpeta ANTES de que el server reciba peticiones
+(async () => {
+  try {
+    await fs.mkdir(BASE_DIR, { recursive: true });
+    console.log("Carpeta creada correctamente:", BASE_DIR);
+  } catch (e) {
+    console.log("Error creando carpeta:", e);
+  }
+})();
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
@@ -24,7 +34,6 @@ app.use(async (req, res, next) => {
     req.user_token = req.cookies.user_token;
   }
 
-  await fs.mkdir(BASE_DIR, { recursive: true });
   next();
 });
 
