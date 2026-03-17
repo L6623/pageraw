@@ -92,33 +92,17 @@ app.get('/raw/:id', async (req, res) => {
   try {
     const content = await fs.readFile(filePath, 'utf8');
 
-    const ua = (req.get('User-Agent') || "").toLowerCase();
+    // Detectar si es navegador por el header Accept
+    const accept = (req.get("Accept") || "").toLowerCase();
+    const isBrowser = accept.includes("text/html");
 
-    // Detectar exploits reales
-    const isExploit =
-      ua.includes("roblox") ||
-      ua.includes("delta") ||
-      ua.includes("scriptware") ||
-      ua.includes("krnl") ||
-      ua.includes("fluxus") ||
-      ua.includes("synapse") ||
-      ua.includes("wininet");
-
-    // Detectar navegadores
-    const isBrowser =
-      ua.includes("mozilla") ||
-      ua.includes("chrome") ||
-      ua.includes("safari") ||
-      ua.includes("firefox") ||
-      ua.includes("edge");
-
-    // Si es exploit → devolver LUA puro
-    if (isExploit && !isBrowser) {
+    if (!isBrowser) {
+      // Exploit recibe LUA puro
       res.set('Content-Type', 'text/plain; charset=utf-8');
       return res.send(content);
     }
 
-    // Si es navegador → capa negra
+    // Navegador recibe capa negra
     res.send(`
       <!DOCTYPE html>
       <html>
